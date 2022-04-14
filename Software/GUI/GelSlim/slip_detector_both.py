@@ -1,19 +1,15 @@
 #!/usr/bin/env python
 
-from sensor_msgs.msg import CompressedImage, JointState, ChannelFloat32
-from std_msgs.msg import Bool
 import numpy as np
 import time
 from scipy import ndimage
 import matplotlib.pyplot as plt
-from visualization_msgs.msg import *
 from collections import deque
 # from gripper import *
 # from ik.helper import *
 # from robot_comm.srv import *
 # from wsg_50_common.msg import Status
-import rospy, math, cv2, os, pickle
-import std_srvs.srv
+import math, cv2, os, pickle
 import time
 
 timestr = time.strftime("%Y-%m-%d-%H%M%S")
@@ -48,21 +44,11 @@ class slip_detector:
         self.abe_array = np.load('abe_corr.npz') # change this with your aberration array 
         self.x_index = self.abe_array['x']
         self.y_index = self.abe_array['y']
-        self.image_sub1 = rospy.Subscriber("/raspicam_node1/image/compressed",
-                                           CompressedImage,
-                                           self.call_back1,
-                                           queue_size=1,
-                                           buff_size=2**24)
-        self.image_sub2 = rospy.Subscriber("/raspicam_node2/image/compressed",
-                                           CompressedImage,
-                                           self.call_back2,
-                                           queue_size=1,
-                                           buff_size=2**24)
 
         self.collideThre = 2.5
         self.collide_rotation = 2.
         self.marker_thre = 100
-        self.showimage1 = True
+        self.showimage1 = False
         self.showimage2 = False
         self.data1 = deque(maxlen=75)
         self.data2 = deque(maxlen=75)
@@ -396,11 +382,8 @@ class slip_detector:
 
         # raw_input("Press Enter to continue...")
 
-    def call_back1(self, data):
+    def call_back1(self, raw_imag):
 
-        t = time.time()
-        np_arr = np.fromstring(data.data, np.uint8)
-        raw_imag = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         raw_imag = raw_imag[self.x_index, self.y_index, :]
         self.counter1 += 1
         self.counter1 *= (self.counter1 < 1e10)
@@ -430,6 +413,8 @@ class slip_detector:
             self.con_flag1 = True
             self.absmotion1 = 0
             # print("sensor 1 finishes pre-calculation")
+
+            return raw_imag, self.x_iniref1, self.y_iniref1, self.u_addon1, self.v_addon1
 
         else:  #start detecting slip
             # print('time', time.time())
@@ -500,14 +485,13 @@ class slip_detector:
                 # if self.slip_indicator1:
                 #     print("sensor 1 slip!!!")
 
+                return raw_imag, x2, y2, u, v
+
         self.data1.append([raw_imag, time.time(), self.absmotion1])
 
-    def call_back2(self, data):
+    def call_back2(self, raw_imag):
         # return
 
-        t = time.time()
-        np_arr = np.fromstring(data.data, np.uint8)
-        raw_imag = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         raw_imag = raw_imag[self.x_index, self.y_index, :]
         self.counter2 += 1
         self.counter2 *= (self.counter2 < 1e10)
@@ -537,6 +521,8 @@ class slip_detector:
             self.con_flag2 = True
             self.absmotion2 = 0
             # print("sensor 2 finishes pre-calculation")
+
+            return raw_imag, self.x_iniref2, self.y_iniref2, self.u_addon2, self.v_addon2
 
         else:  #start detecting slip
             # print('time', time.time())
@@ -611,25 +597,7 @@ class slip_detector:
                 # if self.slip_indicator2:
                 #     print("sensor 2 slip!!!")
 
+                return raw_imag, x2, y2, u, v
+
         # print('frequency', 1 / (time.time() - t))
         # self.data2.append([raw_imag, time.time(), self.absmotion2])
-
-
-def main():
-    #print "start"
-    rospy.init_node('slip_detector', anonymous=True)
-    while not rospy.is_shutdown():
-        # time.sleep(2)
-        # open_gripper()
-        # time.sleep(1)
-        # force_initial = 10
-        # close_gripper_f(50,force_initial)
-        # time.sleep(0.1)
-        slip = slip_detector()
-        rospy.spin()
-
-
-if __name__ == "__main__":
-    main()
-
-#%%
